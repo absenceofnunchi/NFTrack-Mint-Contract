@@ -14,8 +14,21 @@ contract NFTrack is ERC721 {
         _tokenIds.increment();
 
         uint256 newNftTokenId = _tokenIds.current();
-        _mint(receiver, newNftTokenId);
+        _safeMint(receiver, newNftTokenId);
 
         return newNftTokenId;
+    }
+
+    /**
+     * @dev See {IERC721-safeTransferFrom}.
+     */
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes memory _data
+    ) public virtual override {
+        require(_isApprovedOrOwner(_msgSender(), tokenId), "ERC721: transfer caller is not owner nor approved");
+        _safeTransfer(from, to, tokenId, _data);
     }
 }
