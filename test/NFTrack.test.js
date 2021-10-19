@@ -1,3 +1,15 @@
+// Gas cost (at 100 Gwei)
+// deployment of NFTrack: 3086672, $1,444.08
+// createSimpePayment: 183996, $86.08
+// pay: 107475, $50.28
+// withdraw: 33275, $15.52
+// withdrawFee: 33338, $15.55
+// resell: 114096, $53.22
+
+// deployement of SimplePayment: 806253, $376.64
+// mint and transfer: 131368, $61.37
+// pay: 137490, $64.23
+
 const NFTrack = artifacts.require("NFTrack");
 
 contract('SimplePayment through NFTrack', (accounts) => {
