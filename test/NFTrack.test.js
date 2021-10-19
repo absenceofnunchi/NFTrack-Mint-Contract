@@ -1,118 +1,205 @@
 const NFTrack = artifacts.require("NFTrack");
-const SimplePayment = artifacts.require("SimplePayment");
 
-contract('SimplePayment', (accounts) => {
-    let NFTrackContract, priceInput, admin, seller, buyer, tokenId, noAccount;
+contract('SimplePayment through NFTrack', (accounts) => {
+    let NFTrackContract, priceInput, admin, seller, itemId, newItemId, buyer, anotherBuyer, tokenId, noAccount;
     before(async function () {
         admin = accounts[0];
         seller = accounts[1];
-        buyer = accounts[2];
-        noAccount = "0x0000000000000000000000000000000000000000"
+        itemId = accounts[2];
+        buyer = accounts[3];
+        anotherBuyer = accounts[4];
+        noAccount = "0x0000000000000000000000000000000000000000";
+        newItemId = accounts[5];
 
         priceInput = web3.utils.toWei("1", "ether");
         // priceInput = 100;
-        NFTrackContract = await NFTrack.deployed( { from: admin });
+        NFTrackContract = await NFTrack.deployed(admin, { from: admin });
     });
 
-    describe("First sale", async () => {
-        let simplePaymentContract;
-        before(async function () {
-            simplePaymentContract = await SimplePayment.deployed(priceInput, admin, { from: seller });
-        });
-    
-        it("Successfully deploy a SimplePayment contract", async () => {
-            const fetchedSeller = await simplePaymentContract.seller.call();
-            const price = await simplePaymentContract.price.call()
-            const paid = await simplePaymentContract.paid.call()
-        
-            assert.equal(fetchedSeller, seller, "The seller is incorrect.");
-            assert.equal(price, priceInput, "The price for the item is incorrect.")
-            assert.equal(paid, false, "The paid variable should be false.")
-        })
-    
-        it("Successfully mint a token and transfer it to SimplePayment contract.", async () => {
-            const result = await NFTrackContract.mintNft(simplePaymentContract.address, { from: seller });
-            const newlyMintedTokenId = result.logs[0].args.tokenId.toNumber();
-    
-            tokenId = await simplePaymentContract.tokenId.call();
-            const fetchedSeller = await simplePaymentContract.seller.call();
-            const tokenAdded = await simplePaymentContract.tokenAdded.call();
-        
-            assert.equal(tokenId.toNumber(), newlyMintedTokenId, "The token ID is incorrect.");
-            assert.equal(fetchedSeller, seller, "Only the seller can transfer the token");
-            assert.isTrue(tokenAdded, "The tokenAdded variable is not set to true.");
-        })
-    
-        it("Successfully paid for the token and tranferred the ownership of the token to the new buyer.", async () => {
-            let result;
-            try {
-                result = await simplePaymentContract.pay({ from: buyer, value: priceInput });
-            } catch (e) {
-                console.log(e)
-            }
-    
-            const buyerInEvent = result.receipt.logs[0].args["0"];
-            const paymentAmountInEvent = result.receipt.logs[0].args["1"];
-            const paid = await simplePaymentContract.paid.call();
-            const payment = await simplePaymentContract.payment.call();
-            const fee = await simplePaymentContract.fee.call();
-    
-            const calculatedFee = priceInput * 2 / 100;
-            const expectedFee = calculatedFee.toString();
-    
-            const calculatedPayment = priceInput - calculatedFee;
-            const expectedPayment = calculatedPayment.toString();
-    
-            assert.isTrue(paid, "The paid property is not toggled to true.");
-            assert.equal(fee.toString(), expectedFee, "Incorrect fee.");
-            assert.equal(payment, expectedPayment, "The price input and the received amount in the smart contract are different.");
-            assert.equal(buyerInEvent, buyer, "The buyer is different from what's in the event.");
-            assert.equal(paymentAmountInEvent, priceInput, "The payment amount is different from what's in the event.");
-        })
+    it("NFTrack has been successfully deployed", async () => {
+        const fetchedAdmin = await NFTrackContract.checkAdmin();
+        const symbol = await NFTrackContract.symbol();
+
+        assert.equal(fetchedAdmin, admin, "The admin is incorrect.");
+        assert.equal(symbol, "TRK", "Wrong symbol");
     })
 
-    describe('Resale', async () => {
-        let resaleSimplePaymentContract;
-        before(async function () {
-            // Now the buyer is the new seller since they are the owner of the minted token
-            resaleSimplePaymentContract = await SimplePayment.new(priceInput, admin, { from: buyer });
-        })
+    it("create simple payment", async () => {
+        let result;
+        try {
+            result = await NFTrackContract.createSimplePayment(seller, priceInput, itemId, { from: seller });
+            // console.log("result", result)
+        } catch (e) {
+            console.log("createSimpePayment", e)
+        }
 
-        it("Successfully deploy a new instance of SimplePayment contract for resale.", async () => {
-            const newSeller = await resaleSimplePaymentContract.seller.call();
-            const price = await resaleSimplePaymentContract.price.call();
-            const paid = await resaleSimplePaymentContract.paid.call();
-            const tokenAdded = await resaleSimplePaymentContract.tokenAdded.call();
-            const resaleTokenId = await resaleSimplePaymentContract.tokenId.call();
+        // Parse event
+        tokenId = result.receipt.logs[0].args.tokenId.toNumber();
+        
+        const onSale = await NFTrackContract.checkOnSale(tokenId);
+        const ownerAddress = await NFTrackContract.ownerOf(tokenId);
+        const balance = await NFTrackContract.balanceOf(ownerAddress);
+        const approvedAddress = await NFTrackContract.getApproved(tokenId);
+        const paymentStruct = await NFTrackContract.checkSimplePayment(itemId);
+        const itemPrice = paymentStruct["1"];
+        const itemToken = paymentStruct["3"];
+        const sellerAddress = paymentStruct["4"];
 
+        assert.isTrue(onSale, "The status of the token should be listed for sale.");
+        assert.equal(ownerAddress, seller, "The seller is not the owner of the newly minted token.");
+        assert.equal(balance, tokenId, "Wrong token ID");
+        assert.equal(approvedAddress, noAccount, "No account should be approved.");
+        assert.equal(itemPrice.toString(), priceInput, "Wrong price has been set to the Payment struct.");
+        assert.equal(itemToken, tokenId, "Wrong token ID has been set to the Payment struct.");
+        assert.equal(sellerAddress, seller, "Wrong seller has been set to the Payment struct.");
+    })
 
-            assert.equal(newSeller, buyer, "The seller is incorrect.");
-            assert.equal(price, priceInput, "The price for the item is incorrect.");
-            assert.equal(paid, false, "The paid variable should be false.");
-            assert.isFalse(tokenAdded, "The tokenAdded variable is not set to false.");
-            assert.equal(resaleTokenId.toNumber(), 0, "No token should be present.");
-        })
+    it("pay for the item", async () => {
+        // Attempt to resell before selling which is an attempt to register the same token twice. 
+        try {
+            await NFTrackContract.resell(priceInput, itemId, tokenId, { from: seller })
+        } catch (e) {
+            assert.equal(e.reason, 'The token is already listed for sale.', "The token should not be allowed to be re-registered before selling.")
+        }
 
-        it("Successfully transfer the newly bought token into the new SimplePayment contract for resale.", async () => {
-            const ownerAddress = await NFTrackContract.ownerOf(tokenId);
-            assert.equal(ownerAddress, buyer, "The current user (buyer) doesn't own the token they're trying to resell.");
+        // Pay the incorrect amount
+        const wrongPrice = await web3.utils.toWei("2", "ether");
+        try {
+            await NFTrackContract.pay(itemId, { from: buyer, value: wrongPrice });
+        } catch (e) {
+            assert.equal(e.reason, "Incorrect price.", "The pay is supposed to fail due to the wrong price.");
+        }
 
-            const approvedAddress = await NFTrackContract.getApproved(tokenId);
-            assert.equal(approvedAddress.toString(), noAccount, "Wrong approved address. No account should be approved at the moment.");
+        // Pay the correct amount and check the event
+        let result;
+        try {
+            result = await NFTrackContract.pay(itemId, { from: buyer, value: priceInput });
+        } catch (e) {
+            console.log(e);
+        }
 
-            const result = await NFTrackContract.safeTransferFrom(buyer, resaleSimplePaymentContract.address, tokenId, { from: buyer });
-            const transferEvent = result.receipt.logs[0].args;
+        // Another attempt at purchaseing the token should fail because the price is set to 0
+        try {
+            await NFTrackContract.pay(itemId, { from: buyer, value: priceInput });
+        } catch (e) {
+            assert.equal(e.reason, "Not for sale.", "The sale should be prevent.");
+        }
+        
+        // Check the PaymentMade event.
+        const paymentMadeEvent = result.receipt.logs[0].args;
+        const sender = paymentMadeEvent["0"];
+        const paymentValue = paymentMadeEvent["2"];
+        const formattedValue = web3.utils.toWei(paymentValue).toString();
 
-            assert.equal(transferEvent["0"], buyer, "Wrong sender included in the event.");
-            assert.equal(transferEvent.owner, buyer, "Wrong owner included in the event.");
-            assert.equal(transferEvent.tokenId.toNumber(), tokenId, "Wrong token included in the event.");
-            assert.equal(transferEvent.approved, noAccount, "Wrong approved account included in the event.");
-            
-            const tokenAdded = await resaleSimplePaymentContract.tokenAdded.call();
-            assert.isTrue(tokenAdded, "The tokenAdded variable is not set to true.");
+        const paymentStruct = await NFTrackContract.checkSimplePayment(itemId);
+        const itemPayment = paymentStruct["0"];
+        const itemPrice = paymentStruct["1"];
+        const fee = paymentStruct["2"];
+        const itemToken = paymentStruct["3"];
+        const sellerAddress = paymentStruct["4"]; 
 
-            const resaleTokenId = await resaleSimplePaymentContract.tokenId.call();
-            assert.equal(resaleTokenId.toNumber(), tokenId.toNumber(), "No token should be present.");
-        })
+        // Check the balance and the ownership of the token
+        const ownerAddress = await NFTrackContract.ownerOf(itemToken);
+        const balance = await NFTrackContract.balanceOf(buyer);
+        const onSale = await NFTrackContract.checkOnSale(tokenId);
+
+        assert.equal(sender, seller, "Wrong seller in event.");
+        assert.equal(formattedValue, priceInput, "Wrong price value in event.");
+        assert.equal(itemPayment.toString(), priceInput - fee, "Wrong payment ammount in the Payment struct.")
+        assert.equal(fee.toString(), priceInput * 2 / 100, "Wrong fee amount in the Payment struct.");
+        assert.equal(itemToken.toNumber(), tokenId, "Wrong token ID in the Payment struct.");
+        assert.equal(sellerAddress, seller, "Wrong seller address in the Payment struct.");
+        assert.equal(itemPrice, 0, "The updated item price should be 0 in the Payment struct.");
+        assert.equal(ownerAddress, buyer, "The new owner of the token after the purchase is incorrect.");
+        assert.equal(balance, tokenId, "The balance of the buyer after the purchase is incorrect. #1");
+        assert.equal(balance.toString(), itemToken.toString(), "The balance of the buyer after the purchase is incorrect. #2");
+        assert.isFalse(onSale, "The status of the token should not be listed for sale.");
+    })
+
+    it("The seller successfullly withdraws their fund.", async () => {
+        // Withdraw attempt by a non-authorized person.
+        try {
+            const result = await NFTrackContract.withdraw(itemId, { from: buyer });
+            console.log("withdraw result", result);
+        } catch (e) {
+            assert.equal(e.reason, "Not authorized.", "Withdraw should not be authorized.")
+        }
+
+        // Succeed in withdrawing
+        try {
+            await NFTrackContract.withdraw(itemId, { from: seller });
+        } catch (e) {
+            console.log(e)
+        }
+
+        const paymentStruct = await NFTrackContract.checkSimplePayment(itemId);
+        const itemPayment = paymentStruct["0"];
+        const fee = paymentStruct["2"];
+        const withdrawAmount = priceInput - fee
+
+        assert.equal(withdrawAmount, itemPayment.toString(), "Incorrect withdraw amount.");
+    })
+
+    it("The admin successfully withdraws the commission.", async () => {
+        // Unauthorized attempt to withdraw the fee.
+        try {
+            const result = await NFTrackContract.withdrawFee(itemId, { from: seller })
+        } catch (e) {
+            assert.equal(e.reason, "Not authorized to withdraw the fee.", "The unauthorized attempt should be reverted.")
+        }
+
+        // Authorized withdraw
+        try {
+            await NFTrackContract.withdrawFee(itemId, { from: admin })
+        } catch (e) {
+            console.log(e);
+        }
+
+        const paymentStruct = await NFTrackContract.checkSimplePayment(itemId);
+        const fee = paymentStruct["2"];
+        const expectedFee = priceInput * 2 / 100;
+
+        assert.equal(fee, expectedFee, "Incorrect fee.");
+    })
+
+    it("Successfully resell", async () => {
+        // Attempt to resell by an unauthorized user.
+        try {
+            await NFTrackContract.resell(priceInput, newItemId, tokenId, { from: seller })
+        } catch (e) {
+            assert.equal(e.reason, "You are not the owner of the token.", "The transaction should fail due to a call by an unauthorized user.")
+        }
+
+        // Incorrect amount for reselling (0 or less)
+        try {
+            await NFTrackContract.resell(0, newItemId, tokenId, { from: buyer })
+        } catch (e) {
+            assert.equal(e.reason, "The price has to be greater than 0", "The transaction should fail due to an incorrect pricing.")
+        }
+
+        // Successful resell
+        try {
+            await NFTrackContract.resell(priceInput, newItemId, tokenId, { from: buyer })
+        } catch (e) {
+            console.log(e)
+        }
+
+        // The onSale has to be toggled to true
+        const onSale = await NFTrackContract.checkOnSale(tokenId);
+
+        // A new Payment struct has to be set with newItemId in _simplePayment mapping
+        const paymentStruct = await NFTrackContract.checkSimplePayment(newItemId);
+        const itemPayment = paymentStruct["0"];
+        const itemPrice = paymentStruct["1"];
+        const fee = paymentStruct["2"];
+        const itemToken = paymentStruct["3"];
+        const sellerAddress = paymentStruct["4"]; 
+
+        assert.isTrue(onSale, "The status of the token should be listed for sale.");
+        assert.equal(itemPayment.toString(), 0, "Wrong payment ammount in the Payment struct.")
+        assert.equal(itemPrice.toString(), priceInput, "Wrong price has been set to the Payment struct.");
+        assert.equal(fee.toString(), 0, "Wrong fee amount in the Payment struct.");
+        assert.equal(itemToken.toNumber(), tokenId, "Wrong token ID in the Payment struct.");
+        assert.equal(sellerAddress, buyer, "Wrong seller address in the Payment struct.");
     })
 })
