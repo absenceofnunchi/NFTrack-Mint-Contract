@@ -54,11 +54,11 @@ contract NFTrack is ERC721 {
         _safeTransfer(from, to, tokenId, _data);
     }
     
-    function createSimplePayment(address receiver, uint price, address id) public {
+    function createSimplePayment(uint price, address id) public {
         _tokenIds.increment();
 
         uint256 newNftTokenId = _tokenIds.current();
-        _safeMint(receiver, newNftTokenId);
+        _mint(msg.sender, newNftTokenId);
         
         _onSale[newNftTokenId] = true;
 

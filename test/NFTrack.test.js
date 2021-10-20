@@ -39,7 +39,7 @@ contract('SimplePayment through NFTrack', (accounts) => {
     it("create simple payment", async () => {
         let result;
         try {
-            result = await NFTrackContract.createSimplePayment(seller, priceInput, itemId, { from: seller });
+            result = await NFTrackContract.createSimplePayment(priceInput, itemId, { from: seller });
             // console.log("result", result)
         } catch (e) {
             console.log("createSimpePayment", e)
