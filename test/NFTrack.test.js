@@ -17,7 +17,7 @@ contract('SimplePayment through NFTrack', (accounts) => {
     before(async function () {
         admin = accounts[0];
         seller = accounts[1];
-        itemId = accounts[2];
+        itemId = "62675f2b5c1fedb66fbfa6aa921b10f45288865a276ea7d6c4aea04551656316";
         buyer = accounts[3];
         anotherBuyer = accounts[4];
         noAccount = "0x0000000000000000000000000000000000000000";
@@ -38,6 +38,7 @@ contract('SimplePayment through NFTrack', (accounts) => {
 
     it("create simple payment", async () => {
         let result;
+
         try {
             result = await NFTrackContract.createSimplePayment(priceInput, itemId, { from: seller });
             // console.log("result", result)
