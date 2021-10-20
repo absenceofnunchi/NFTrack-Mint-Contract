@@ -18,13 +18,13 @@ contract NFTrack is ERC721 {
     }
     
     // Maps from a item ID to Payment
-    mapping (address => Payment) private _simplePayment;
+    mapping (string => Payment) private _simplePayment;
     
     // Maps from a tokenID to bool to indicate whether a token is currently on sale
     // This is to prevent a token to be listed for sale only one instance at a time.
     mapping (uint256 => bool) private _onSale;
     
-    event PaymentMade(address buyer, uint256 amount, address id);
+    event PaymentMade(address buyer, uint256 amount, string id);
 
     constructor(
         address _admin
@@ -55,7 +55,7 @@ contract NFTrack is ERC721 {
         _safeTransfer(from, to, tokenId, _data);
     }
     
-    function createSimplePayment(uint price, address id) public {
+    function createSimplePayment(uint price, string memory id) public {
         _tokenIds.increment();
 
         uint256 newNftTokenId = _tokenIds.current();
@@ -68,7 +68,7 @@ contract NFTrack is ERC721 {
         _simplePayment[id].seller = msg.sender;
     }
 
-    function resell(uint price, address id, uint256 tokenId) public {
+    function resell(uint price, string memory id, uint256 tokenId) public {
         require(  
             _onSale[tokenId] == false,
             "The token is already listed for sale."
@@ -91,7 +91,7 @@ contract NFTrack is ERC721 {
     }
     
     // id is the posting identifier
-    function pay(address id) public payable {
+    function pay(string memory id) public payable {
         require(
             _simplePayment[id].price > 0,
             "Not for sale."
@@ -117,7 +117,7 @@ contract NFTrack is ERC721 {
         emit PaymentMade(msg.sender, msg.value, id);
     }
     
-    function withdraw(address id) public {
+    function withdraw(string memory id) public {
         require(
             msg.sender == _simplePayment[id].seller, "Not authorized."
         );
@@ -125,7 +125,7 @@ contract NFTrack is ERC721 {
         payable(msg.sender).transfer(_simplePayment[id].payment);
     }
     
-    function withdrawFee(address id) public {
+    function withdrawFee(string memory id) public {
         require(
             admin == msg.sender,
             "Not authorized to withdraw the fee."
@@ -135,7 +135,7 @@ contract NFTrack is ERC721 {
     }
 
     // ONLY FOR TESTING. Delete before deploying
-    function checkSimplePayment(address id) public view returns (uint, uint, uint, uint256, address) {
+    function checkSimplePayment(string memory id) public view returns (uint, uint, uint, uint256, address) {
         Payment memory payment = _simplePayment[id];
         return (payment.payment, payment.price, payment.fee, payment.tokenId, payment.seller);
     }
