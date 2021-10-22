@@ -25,23 +25,30 @@ contract('SimplePayment through NFTrack', (accounts) => {
 
         priceInput = web3.utils.toWei("1", "ether");
         // priceInput = 100;
-        NFTrackContract = await NFTrack.deployed(admin, { from: admin });
+        NFTrackContract = await NFTrack.deployed({ from: admin });
     });
 
     it("NFTrack has been successfully deployed", async () => {
         const fetchedAdmin = await NFTrackContract.checkAdmin();
         const symbol = await NFTrackContract.symbol();
 
+        const result = await NFTrackContract.getInfo(0, "wrong ID");
+        const isTokenOnSale = result["0"];
+        const price = result["1"]
+        const tokenId = result["2"]
+
         assert.equal(fetchedAdmin, admin, "The admin is incorrect.");
         assert.equal(symbol, "TRK", "Wrong symbol");
+        assert.isFalse(isTokenOnSale, "The token sale status should be false");
+        assert.equal(price.toString(), "0", "The default price should be zero");
+        assert.equal(tokenId.toString(), "0", "The default token ID should be zero.");
     })
 
-    it("create simple payment", async () => {
+    it("create simple payment", async () => {        
         let result;
 
         try {
             result = await NFTrackContract.createSimplePayment(priceInput, itemId, { from: seller });
-            // console.log("result", result)
         } catch (e) {
             console.log("createSimpePayment", e)
         }
@@ -68,6 +75,12 @@ contract('SimplePayment through NFTrack', (accounts) => {
     })
 
     it("pay for the item", async () => {
+        // Check variable values using getInfo before the payment
+        const getInfoResultBefore = await NFTrackContract.getInfo(tokenId, itemId);
+        const isTokenOnSaleBefore = getInfoResultBefore["0"];
+        const priceInStructBefore = getInfoResultBefore["1"]
+        const tokenIdInStructBefore = getInfoResultBefore["2"]
+
         // Attempt to resell before selling which is an attempt to register the same token twice. 
         try {
             await NFTrackContract.resell(priceInput, itemId, tokenId, { from: seller })
@@ -104,12 +117,19 @@ contract('SimplePayment through NFTrack', (accounts) => {
         const paymentValue = paymentMadeEvent["2"];
         const formattedValue = web3.utils.toWei(paymentValue).toString();
 
+        // Check using the test function
         const paymentStruct = await NFTrackContract.checkSimplePayment(itemId);
         const itemPayment = paymentStruct["0"];
         const itemPrice = paymentStruct["1"];
         const fee = paymentStruct["2"];
         const itemToken = paymentStruct["3"];
         const sellerAddress = paymentStruct["4"]; 
+
+        // Check variable values using getInfo after the payment
+        const getInfoResultAfter = await NFTrackContract.getInfo(tokenId, itemId);
+        const isTokenOnSaleAfter = getInfoResultAfter["0"];
+        const priceInStructAfter = getInfoResultAfter["1"]
+        const tokenIdInStructAfter = getInfoResultAfter["2"]
 
         // Check the balance and the ownership of the token
         const ownerAddress = await NFTrackContract.ownerOf(itemToken);
@@ -127,6 +147,12 @@ contract('SimplePayment through NFTrack', (accounts) => {
         assert.equal(balance, tokenId, "The balance of the buyer after the purchase is incorrect. #1");
         assert.equal(balance.toString(), itemToken.toString(), "The balance of the buyer after the purchase is incorrect. #2");
         assert.isFalse(onSale, "The status of the token should not be listed for sale.");
+        assert.isTrue(isTokenOnSaleBefore, "The token sale status should be true");
+        assert.equal(priceInStructBefore.toString(), priceInput, "The price should match the priceInput variable.");
+        assert.equal(tokenIdInStructBefore.toString(), tokenId, "The token ID from the struct should match the tokenId provided initially.");
+        assert.isFalse(isTokenOnSaleAfter, "The token sale status should be false");
+        assert.equal(priceInStructAfter.toString(), "0", "The price should be 0.");
+        assert.equal(tokenIdInStructAfter.toString(), tokenId, "The token ID from the struct should match the tokenId provided initially.");
     })
 
     it("The seller successfullly withdraws their fund.", async () => {
@@ -176,6 +202,12 @@ contract('SimplePayment through NFTrack', (accounts) => {
     })
 
     it("Successfully resell", async () => {
+        // Check variable values using getInfo before the payment
+        const getInfoResultBefore = await NFTrackContract.getInfo(tokenId, newItemId);
+        const isTokenOnSaleBefore = getInfoResultBefore["0"];
+        const priceInStructBefore = getInfoResultBefore["1"]
+        const tokenIdInStructBefore = getInfoResultBefore["2"]
+
         // Attempt to resell by an unauthorized user.
         try {
             await NFTrackContract.resell(priceInput, newItemId, tokenId, { from: seller })
@@ -208,11 +240,23 @@ contract('SimplePayment through NFTrack', (accounts) => {
         const itemToken = paymentStruct["3"];
         const sellerAddress = paymentStruct["4"]; 
 
+        // Check variable values using getInfo after the payment
+        const getInfoResultAfter = await NFTrackContract.getInfo(tokenId, newItemId);
+        const isTokenOnSaleAfter = getInfoResultAfter["0"];
+        const priceInStructAfter = getInfoResultAfter["1"]
+        const tokenIdInStructAfter = getInfoResultAfter["2"]
+
         assert.isTrue(onSale, "The status of the token should be listed for sale.");
         assert.equal(itemPayment.toString(), 0, "Wrong payment ammount in the Payment struct.")
         assert.equal(itemPrice.toString(), priceInput, "Wrong price has been set to the Payment struct.");
         assert.equal(fee.toString(), 0, "Wrong fee amount in the Payment struct.");
         assert.equal(itemToken.toNumber(), tokenId, "Wrong token ID in the Payment struct.");
         assert.equal(sellerAddress, buyer, "Wrong seller address in the Payment struct.");
+        assert.isFalse(isTokenOnSaleBefore, "The token sale status should be false prior to reselling.");
+        assert.equal(priceInStructBefore.toString(), "0", "The price for the item in the struct prior to reselling should be at zero.");
+        assert.equal(tokenIdInStructBefore.toString(), "0", "The token ID from the struct should be zero..");
+        assert.isTrue(isTokenOnSaleAfter, "The token sale status should be true after being listed for resale.");
+        assert.equal(priceInStructAfter.toString(), priceInput, "The price should be the same as priceInput after being listed for resale.");
+        assert.equal(tokenIdInStructAfter.toString(), tokenId, "The token ID from the struct should match the tokenId provided initially.");
     })
 })

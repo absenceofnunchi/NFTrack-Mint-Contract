@@ -24,12 +24,10 @@ contract NFTrack is ERC721 {
     // This is to prevent a token to be listed for sale only one instance at a time.
     mapping (uint256 => bool) private _onSale;
     
-    event PaymentMade(address buyer, uint256 amount, string id);
+    event PaymentMade(string id);
 
-    constructor(
-        address _admin
-    ) ERC721("NFTrack", "TRK") {
-        admin = payable(_admin);
+    constructor() ERC721("NFTrack", "TRK") {
+        admin = payable(msg.sender);
     }
 
     function mintNft(address receiver) external returns (uint256) {
@@ -39,20 +37,6 @@ contract NFTrack is ERC721 {
         _safeMint(receiver, newNftTokenId);
 
         return newNftTokenId;
-    }
-
-    /**
-     * @dev See {IERC721-safeTransferFrom}.
-     * needs to be exclucded when deployed
-     */
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory _data
-    ) public virtual override {
-        require(_isApprovedOrOwner(_msgSender(), tokenId), "ERC721: transfer caller is not owner nor approved");
-        _safeTransfer(from, to, tokenId, _data);
     }
     
     function createSimplePayment(uint price, string memory id) public {
@@ -114,7 +98,7 @@ contract NFTrack is ERC721 {
         _simplePayment[id].price = 0; // not for sale anymore
         _onSale[tokenId] = false;
         
-        emit PaymentMade(msg.sender, msg.value, id);
+        emit PaymentMade(id);
     }
     
     function withdraw(string memory id) public {
@@ -132,6 +116,10 @@ contract NFTrack is ERC721 {
         );
         
         admin.transfer(_simplePayment[id].fee);
+    }
+    
+    function getInfo(uint256 tokenId, string memory id) public view returns (bool, uint, uint256) {
+        return (_onSale[tokenId], _simplePayment[id].price, _simplePayment[id].tokenId);
     }
 
     // ONLY FOR TESTING. Delete before deploying
